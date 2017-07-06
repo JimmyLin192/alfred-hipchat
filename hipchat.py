@@ -1,6 +1,7 @@
 # encoding: utf-8
 
 import sys
+import os
 import argparse
 import re
 import json
@@ -8,6 +9,9 @@ from urllib2 import URLError
 import webbrowser
 import requests
 from workflow import Workflow, web, PasswordNotFound
+
+MAX_ROOM_UPPER_LIMIT = 5000
+MAX_USER_UPPER_LIMIT = 20000
 
 def hipchat_keys():
     wflw = Workflow()
@@ -47,38 +51,39 @@ def hipchat_list(keys):
             return None
         else:
             try:
-                hipchat_rooms = web.get(wflw.settings['api_url'] +
-                                        '/v2/room?auth_token=' +
-                                        api_key + '&max-results=1000',
-                                        None,
-                                        timeout=wflw.settings['timeout']
-                                       ).json()
-                hipchat_users = web.get(wflw.settings['api_url'] +
-                                        '/v2/user?auth_token=' +
-                                        api_key + '&max-results=1000',
-                                        None,
-                                        timeout=wflw.settings['timeout']
-                                       ).json()
+                for start_index in range(0, MAX_ROOM_UPPER_LIMIT, 1000):
+                    request = wflw.settings['api_url'] + '/v2/room?auth_token=' + api_key + \
+                                ('&start-index=%d' % start_index) + '&max-results=1000'
+                    sys.stdout.write(request)
+                    hipchat_rooms = web.get(request, None, timeout=wflw.settings['timeout']).json()
+                    for room in hipchat_rooms['items']:
+                        hipchat_search.append({
+                            'name': room['name'],
+                            'id': room['id'],
+                            'description': "%s Room" % room['privacy'].title(),
+                            'type': 'room'
+                    })
+
+                for start_index in range(0, MAX_USER_UPPER_LIMIT, 1000):
+                    request = wflw.settings['api_url'] + '/v2/user?auth_token=' + api_key + \
+                                ('&start-index=%d' % start_index) + '&max-results=1000'
+                    # sys.stdout.write(request)
+                    hipchat_users = web.get(request, None, timeout=wflw.settings['timeout']).json()
+                    for user in hipchat_users['items']:
+                        hipchat_search.append({
+                            'name': user['name'],
+                            'mention_name': user['mention_name'],
+                            'id': user['id'],
+                            'description': "User @%s" % user['mention_name'],
+                            'type': "user"
+                        })
+
             except URLError, requests.SSLError:
                 wflw.add_item(title='Error fetching lists from HipChat API.',
                               valid=False)
                 wflw.send_feedback()
                 return None
 
-            for room in hipchat_rooms['items']:
-                hipchat_search.append({
-                    'name': room['name'],
-                    'id': room['id'],
-                    'description': "%s Room" % room['privacy'].title(),
-                    'type': 'room'
-                    })
-            for user in hipchat_users['items']:
-                hipchat_search.append({
-                    'name': user['name'],
-                    'mention_name': user['mention_name'],
-                    'id': user['id'],
-                    'description': "User @%s" % user['mention_name'],
-                    'type': "user"})
     return hipchat_search
 
 def search_hipchat_names(hlist):
@@ -135,7 +140,8 @@ def main(wflw):
 
     if args.open:
         url = hipchat_urlopen(wflw.args[1])
-        webbrowser.open(url)
+        # webbrowser.open(url)
+        os.system("open " + url)
         return
 
     if len(wflw.args):
@@ -148,7 +154,7 @@ def main(wflw):
 
     hipchat_search = wflw.cached_data('alfred-hipchat',
                                       wrapper,
-                                      max_age=wflw.settings['cache_max_age'])
+                                      max_age=0)
 
     if query:
         hipchat_search = wflw.filter(query,
@@ -172,7 +178,7 @@ if __name__ == u"__main__":
     if 'api_url' not in WF.settings:
         WF.settings['api_url'] = "https://api.hipchat.com"
     if 'timeout' not in WF.settings:
-        WF.settings['timeout'] = 5
+        WF.settings['timeout'] = 10
     if 'cache_max_age' not in WF.settings:
         WF.settings['cache_max_age'] = 180
     sys.exit(WF.run(main))
