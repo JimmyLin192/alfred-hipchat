@@ -56,6 +56,7 @@ def hipchat_list(keys):
                                 ('&start-index=%d' % start_index) + '&max-results=1000'
                     sys.stdout.write(request)
                     hipchat_rooms = web.get(request, None, timeout=wflw.settings['timeout']).json()
+                    count = 0
                     for room in hipchat_rooms['items']:
                         hipchat_search.append({
                             'name': room['name'],
@@ -63,12 +64,16 @@ def hipchat_list(keys):
                             'description': "%s Room" % room['privacy'].title(),
                             'type': 'room'
                     })
+                        count += 1
+                    if count < 999:
+                        break
 
                 for start_index in range(0, MAX_USER_UPPER_LIMIT, 1000):
                     request = wflw.settings['api_url'] + '/v2/user?auth_token=' + api_key + \
                                 ('&start-index=%d' % start_index) + '&max-results=1000'
                     # sys.stdout.write(request)
                     hipchat_users = web.get(request, None, timeout=wflw.settings['timeout']).json()
+                    count = 0
                     for user in hipchat_users['items']:
                         hipchat_search.append({
                             'name': user['name'],
@@ -77,6 +82,9 @@ def hipchat_list(keys):
                             'description': "User @%s" % user['mention_name'],
                             'type': "user"
                         })
+                        count += 1
+                    if count < 999:
+                        break
 
             except URLError, requests.SSLError:
                 wflw.add_item(title='Error fetching lists from HipChat API.',
@@ -154,7 +162,7 @@ def main(wflw):
 
     hipchat_search = wflw.cached_data('alfred-hipchat',
                                       wrapper,
-                                      max_age=0)
+                                      max_age=60*60*24)
 
     if query:
         hipchat_search = wflw.filter(query,
